@@ -1,0 +1,364 @@
+/* ════════════════════════════════════════════════════════════
+   Windows 3.1 Solitaire — Web Edition
+   style.css
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Design tokens (Win 3.1 palette) ─────────────────────── */
+:root {
+    --face:    #c0c0c0;   /* standard gray */
+    --lt:      #ffffff;   /* outer highlight */
+    --lt2:     #dfdfdf;   /* inner highlight */
+    --dk:      #808080;   /* shadow */
+    --xdk:     #000000;   /* deep shadow */
+    --active:  #000080;   /* title bar / selection blue */
+    --acttext: #ffffff;
+    --felt:    #008000;
+    --text:    #000000;
+}
+
+/* ── Reset ────────────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: var(--face);
+    font-family: 'Arial', sans-serif;
+    font-size: 12px;
+    color: var(--text);
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ── Window frame ─────────────────────────────────────────── */
+#win-frame {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100dvh;       /* dynamic viewport height (handles mobile chrome) */
+    /* Raised 3-D border mimicking Win 3.1 window chrome */
+    border: 2px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    outline: 1px solid var(--dk);
+    outline-offset: -2px;
+}
+
+/* ── Title bar ────────────────────────────────────────────── */
+#title-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--active);
+    color: var(--acttext);
+    padding: 3px 4px 3px 6px;
+    flex-shrink: 0;
+}
+
+#title-icon { font-size: 14px; line-height: 1; }
+
+#title-text {
+    flex: 1;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+}
+
+#title-btns { display: flex; gap: 2px; }
+
+.sys-btn {
+    width: 17px;
+    height: 15px;
+    background: var(--face);
+    color: var(--text);
+    border: 1.5px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    font-size: 9px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sys-btn:active {
+    border-color: var(--xdk) var(--lt) var(--lt) var(--xdk);
+}
+
+/* ── Menu bar ─────────────────────────────────────────────── */
+#menu-bar {
+    display: flex;
+    align-items: stretch;
+    background: var(--face);
+    border-bottom: 1px solid var(--dk);
+    flex-shrink: 0;
+}
+
+.menu-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    color: var(--text);
+    line-height: 1.5;
+}
+
+.menu-btn:hover,
+.menu-btn.active {
+    background: var(--active);
+    color: var(--acttext);
+}
+
+/* ── Game canvas ──────────────────────────────────────────── */
+#canvas-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+    background: var(--felt);
+}
+
+#board {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: default;
+}
+
+/* ── Status bar ───────────────────────────────────────────── */
+#status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--face);
+    border-top: 1px solid var(--dk);
+    padding: 2px 8px 3px;
+    flex-shrink: 0;
+}
+
+#status-bar span {
+    font-size: 11px;
+    border: 1px solid;
+    border-color: var(--dk) var(--lt) var(--lt) var(--dk);
+    padding: 1px 8px;
+    min-width: 90px;
+    display: inline-block;
+}
+
+/* ── Dropdown menus ───────────────────────────────────────── */
+.dropdown {
+    position: fixed;
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    z-index: 1000;
+    min-width: 156px;
+    box-shadow: 2px 2px 0 var(--dk);
+}
+
+.dd-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 4px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    gap: 16px;
+}
+
+.dd-item:hover {
+    background: var(--active);
+    color: var(--acttext);
+}
+
+.dd-item:hover .dd-hotkey { color: var(--acttext); }
+
+.dd-hotkey {
+    color: var(--dk);
+    font-size: 11px;
+}
+
+.dd-item.disabled {
+    color: var(--dk);
+    pointer-events: none;
+}
+
+.dd-sep {
+    height: 1px;
+    margin: 2px 0;
+    background: var(--dk);
+    border-bottom: 1px solid var(--lt);
+}
+
+/* ── Modal overlay ────────────────────────────────────────── */
+#overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Dialogs ──────────────────────────────────────────────── */
+.dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    z-index: 600;
+    min-width: 260px;
+    max-height: 90dvh;
+    overflow-y: auto;
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+.dlg-title {
+    display: flex;
+    align-items: center;
+    background: var(--active);
+    color: var(--acttext);
+    padding: 3px 4px 3px 8px;
+    font-size: 12px;
+    font-weight: bold;
+    gap: 4px;
+    position: sticky;
+    top: 0;
+}
+
+.dlg-title span { flex: 1; }
+
+.dlg-close {
+    width: 17px;
+    height: 15px;
+    background: var(--face);
+    color: var(--text);
+    border: 1.5px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    font-size: 9px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dlg-close:active {
+    border-color: var(--xdk) var(--lt) var(--lt) var(--xdk);
+}
+
+.dlg-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dlg-about-body {
+    text-align: center;
+    gap: 6px;
+    padding: 18px 24px;
+}
+
+.dlg-footer {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--dk);
+    position: sticky;
+    bottom: 0;
+    background: var(--face);
+}
+
+/* ── Win 3.1 form controls ────────────────────────────────── */
+.win-fieldset {
+    border: 2px solid;
+    border-color: var(--dk) var(--lt) var(--lt) var(--dk);
+    padding: 6px 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.win-fieldset legend {
+    padding: 0 4px;
+    font-size: 12px;
+}
+
+.win-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0 2px;
+}
+
+.win-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* ── Win 3.1 dialog button ────────────────────────────────── */
+.win-btn-dlg {
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--lt) var(--xdk) var(--xdk) var(--lt);
+    padding: 4px 18px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 72px;
+}
+
+.win-btn-dlg:active {
+    border-color: var(--xdk) var(--lt) var(--lt) var(--xdk);
+    padding: 5px 17px 3px 19px;
+}
+
+.win-btn-dlg:focus-visible {
+    outline: 1px dotted var(--text);
+    outline-offset: -4px;
+}
+
+/* ── Deck chooser canvas ──────────────────────────────────── */
+#deck-chooser {
+    display: block;
+    cursor: pointer;
+    image-rendering: pixelated;
+    max-width: 100%;
+}
+
+/* ── Mobile overrides ─────────────────────────────────────── */
+@media (max-width: 480px) {
+    #title-bar  { padding: 4px 6px; }
+    #menu-bar   { padding: 1px 0; }
+    .menu-btn   { padding: 4px 6px; font-size: 13px; }
+
+    #status-bar { padding: 2px 6px; gap: 8px; }
+    #status-bar span { min-width: 70px; font-size: 10px; }
+
+    .dialog { width: calc(100vw - 16px); min-width: unset; }
+    .win-btn-dlg { padding: 6px 12px; font-size: 13px; }
+}
+
+@media (max-height: 400px) and (orientation: landscape) {
+    #title-bar { padding: 1px 4px; }
+    #menu-bar  { padding: 0; }
+    #status-bar { padding: 1px 6px; }
+}

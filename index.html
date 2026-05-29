@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Solitaire</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="win-frame">
+
+    <div id="title-bar">
+      <span id="title-icon">♠</span>
+      <span id="title-text">Solitaire</span>
+      <div id="title-btns">
+        <button class="sys-btn" id="btn-min" title="Minimize">&#9660;</button>
+        <button class="sys-btn" id="btn-max" title="Maximize">&#9650;</button>
+      </div>
+    </div>
+
+    <div id="menu-bar">
+      <button class="menu-btn" id="mb-game">Game</button>
+      <button class="menu-btn" id="mb-help">Help</button>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="board"></canvas>
+    </div>
+
+    <div id="status-bar">
+      <span id="st-score">Score: 0</span>
+      <span id="st-time">Time: 0</span>
+    </div>
+
+  </div><!-- #win-frame -->
+
+  <!-- ── Dropdown menus ─────────────────────────────────── -->
+  <div id="dd-game" class="dropdown" hidden>
+    <div class="dd-item" data-act="deal">Deal</div>
+    <div class="dd-item" data-act="undo">Undo <span class="dd-hotkey">Ctrl+Z</span></div>
+    <div class="dd-sep"></div>
+    <div class="dd-item" data-act="deck">Deck...</div>
+    <div class="dd-item" data-act="options">Options...</div>
+    <div class="dd-sep"></div>
+    <div class="dd-item" data-act="exit">Exit</div>
+  </div>
+
+  <div id="dd-help" class="dropdown" hidden>
+    <div class="dd-item" data-act="about">About Solitaire...</div>
+  </div>
+
+  <!-- ── Modal overlay (dims background behind dialogs) ── -->
+  <div id="overlay" hidden></div>
+
+  <!-- ── Options / New-game dialog ─────────────────────── -->
+  <div id="dlg-options" class="dialog" hidden>
+    <div class="dlg-title">
+      <span>Options</span>
+      <button class="dlg-close" data-dlg="dlg-options">&#10005;</button>
+    </div>
+    <div class="dlg-body">
+      <fieldset class="win-fieldset">
+        <legend>Draw</legend>
+        <label class="win-label"><input type="radio" name="draw" value="1"> Draw One</label>
+        <label class="win-label"><input type="radio" name="draw" value="3" checked> Draw Three</label>
+      </fieldset>
+      <fieldset class="win-fieldset">
+        <legend>Scoring</legend>
+        <label class="win-label"><input type="radio" name="scoring" value="standard" checked> Standard</label>
+        <label class="win-label"><input type="radio" name="scoring" value="vegas"> Vegas ($)</label>
+        <label class="win-label"><input type="radio" name="scoring" value="none"> None</label>
+      </fieldset>
+      <div class="win-checks">
+        <label class="win-label"><input type="checkbox" id="opt-timed" checked> Timed Game</label>
+        <label class="win-label"><input type="checkbox" id="opt-statusbar" checked> Status Bar</label>
+        <label class="win-label"><input type="checkbox" id="opt-outline"> Outline Dragging</label>
+      </div>
+    </div>
+    <div class="dlg-footer">
+      <button class="win-btn-dlg" id="opts-ok">OK</button>
+      <button class="win-btn-dlg" id="opts-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ── Deck / card-back selector dialog ──────────────── -->
+  <div id="dlg-deck" class="dialog" hidden>
+    <div class="dlg-title">
+      <span>Select Card Back</span>
+      <button class="dlg-close" data-dlg="dlg-deck">&#10005;</button>
+    </div>
+    <div class="dlg-body">
+      <canvas id="deck-chooser"></canvas>
+    </div>
+    <div class="dlg-footer">
+      <button class="win-btn-dlg" id="deck-ok">OK</button>
+      <button class="win-btn-dlg" id="deck-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ── About dialog ───────────────────────────────────── -->
+  <div id="dlg-about" class="dialog" hidden>
+    <div class="dlg-title">
+      <span>About Solitaire</span>
+      <button class="dlg-close" data-dlg="dlg-about">&#10005;</button>
+    </div>
+    <div class="dlg-body dlg-about-body">
+      <p><strong>Solitaire</strong></p>
+      <p>Windows 3.1 Web Edition</p>
+      <p style="margin-top:8px;font-size:11px;color:#555">
+        Card sprites from spriters-resource.com<br>
+        Klondike rules, Draw 1 / Draw 3, Standard / Vegas scoring
+      </p>
+    </div>
+    <div class="dlg-footer">
+      <button class="win-btn-dlg" id="about-ok">OK</button>
+    </div>
+  </div>
+
+  <script src="solitaire.js"></script>
+</body>
+</html>
