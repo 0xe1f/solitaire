@@ -7,13 +7,23 @@
 
 // --- Constants ---
 
-const LOGICAL_W = 640;          // logical canvas width (fixed; canvas scales to match)
-const CARD_W    = 71;           // sprite tile width  (px)
-const CARD_H    = 96;           // sprite tile height (px)
-const BACK_START_ROW = 4;
-const SS_CARDS_PER_ROW = 13;    // cards per row in the sprite sheet
-const DC_CARDS_PER_ROW = 6;     // deck chooser cards per row
-const DC_CARD_PADDING = 4;      // deck chooser card padding
+const LOGICAL_W = 640;    // logical canvas width (fixed; canvas scales to match)
+const CARD_W    = 71;     // sprite tile width  (px)
+const CARD_H    = 96;     // sprite tile height (px)
+const IX_EMPTY_SLOT = 77; // sprite index of the empty card slot
+const IX_WASTE_RECY = 75; // sprite index of the recyclable waste slot
+const IX_WASTE_DONE = 76; // sprite index of the finished waste slot
+const IX_BACKS = [
+    [52],[53],[54],[55],[56],[57], // Available card-back sprite indices
+    [58,59,60],                    // Some are animated, so additional indices
+    [61],[62],                     // represent additional frames
+    [63,64],
+    [65,66,67],
+    [68,69,70],
+];
+const SS_CARDS_PER_ROW = 13; // cards per row in the sprite sheet
+const DC_CARDS_PER_ROW = 6;  // deck chooser cards per row
+const DC_CARD_PADDING = 4;   // deck chooser card padding
 
 const SPRITE_URL = 'cards.png';
 
@@ -22,10 +32,6 @@ const SUIT_ROW = { S: 0, H: 1, C: 2, D: 3 };
 const SUITS    = ['S', 'H', 'C', 'D'];
 const RED_SUITS = new Set(['H', 'D']);
 
-// Available card-back column indices in sprite-sheet row 4.
-// Column 7 is the classic Win3.1 blue-robot back (default).
-const BACKS = [[0],[1],[2],[3],[4],[5],[6,7,8],[9],[10],[11,12],[13,14,15],[16,17,18]];
-
 // Base layout positions in logical coordinates (640 wide)
 const L = {
     STOCK_X:   12, STOCK_Y:  8,
@@ -33,9 +39,10 @@ const L = {
     FOUND_X:   [255, 336, 417, 498], FOUND_Y: 8,
     TAB_X:     [12, 93, 174, 255, 336, 417, 498],
     TAB_Y:     120,
-    FD_DY:     16,    // face-down card vertical offset
-    FU_DY:     20,    // face-up card vertical offset (base; auto-compressed for tall piles)
-    WASTE3_DX: 16,    // horizontal fan offset in Draw-3 mode
+    FD_DY:     3,    // face-down card vertical offset
+    FU_DY:     20,   // face-up card vertical offset (base; auto-compressed for tall piles)
+    WASTE3_DX: 14,   // horizontal fan offset in Draw-3 mode
+    WASTE3_DY: 1,    // vertical fan offset in Draw-3 mode
 };
 
 // Standard-scoring point deltas
@@ -311,7 +318,7 @@ function drawStock() {
         drawBack(L.STOCK_X, L.STOCK_Y);
     } else {
         const canRecycle = !(state.scoring === 'vegas' && state.drawCount === 3 && state.passes >= 1);
-        drawSlot(L.STOCK_X, L.STOCK_Y, canRecycle);
+        drawWasteSlot(L.STOCK_X, L.STOCK_Y, canRecycle);
     }
 }
 
@@ -320,12 +327,13 @@ function drawWaste() {
     const isDragged = drag && drag.src.type === 'waste';
 
     if (wasteLen === 0) {
-        drawSlot(L.WASTE_X, L.WASTE_Y, false);
         return;
     }
 
     if (state.drawCount === 1) {
-        if (!isDragged) drawCard(state.waste[wasteLen - 1], L.WASTE_X, L.WASTE_Y);
+        if (!isDragged) {
+            drawCard(state.waste[wasteLen - 1], L.WASTE_X, L.WASTE_Y);
+        }
         return;
     }
 
@@ -336,8 +344,10 @@ function drawWaste() {
 
     for (let i = 0; i < count; i++) {
         const cardIdx = start + i;
-        if (isDragged && cardIdx === topIdx) continue;
-        drawCard(state.waste[cardIdx], L.WASTE_X + i * L.WASTE3_DX, L.WASTE_Y);
+        if (isDragged && cardIdx === topIdx) {
+            continue;
+        }
+        drawCard(state.waste[cardIdx], L.WASTE_X + i * L.WASTE3_DX, L.WASTE_Y + i * L.WASTE3_DY);
     }
 }
 
@@ -350,8 +360,7 @@ function drawFoundations() {
         const visLen    = pile.length - (isDragged ? 1 : 0);
 
         if (visLen <= 0) {
-            drawSlot(x, y, false);
-            drawSuitHint(x, y, SUITS[fi]);
+            drawSlot(x, y);
         } else {
             drawCard(pile[visLen - 1], x, y);
         }
@@ -364,7 +373,7 @@ function drawTableau(lh) {
         const cx   = L.TAB_X[col];
 
         if (pile.length === 0) {
-            drawSlot(cx, L.TAB_Y, false);
+            drawSlot(cx, L.TAB_Y);
             continue;
         }
 
@@ -394,11 +403,10 @@ function drawCard(card, x, y) {
 
 // Draw a face-down card back
 function drawBack(x, y) {
-    const backStartY = BACK_START_ROW * CARD_H;
     if (spriteReady) {
-        const spriteIndex = BACKS[selectedBack][0];
+        const spriteIndex = IX_BACKS[selectedBack][0];
         const sx = (spriteIndex * CARD_W) % spriteSheet.width;
-        const sy = (Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H) + backStartY;
+        const sy = Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H;
         ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
     } else {
         drawBackFallback(x, y);
@@ -406,46 +414,57 @@ function drawBack(x, y) {
 }
 
 // Draw an empty card-slot outline; showArrow draws a recycle icon
-function drawSlot(x, y, showArrow) {
+function drawSlot(x, y) {
     ctx.save();
-    ctx.strokeStyle = '#004400';
-    ctx.lineWidth   = 1;
-    ctx.setLineDash([4, 4]);
-    roundRect(x, y, CARD_W, CARD_H, 4);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    if (showArrow) {
-        const cx = x + CARD_W / 2;
-        const cy = y + CARD_H / 2;
-        ctx.strokeStyle = '#006600';
-        ctx.lineWidth   = 2;
-        // Circle arc
-        ctx.beginPath();
-        ctx.arc(cx, cy, 14, -Math.PI * 0.85, Math.PI * 0.85);
+    if (spriteReady) {
+        const sx = (IX_EMPTY_SLOT * CARD_W) % spriteSheet.width;
+        const sy = Math.trunc(IX_EMPTY_SLOT / SS_CARDS_PER_ROW) * CARD_H;
+        ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
+    } else {
+        ctx.strokeStyle = '#004400';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([4, 4]);
+        roundRect(x, y, CARD_W, CARD_H, 4);
         ctx.stroke();
-        // Arrow tip at the open end
-        const angle = Math.PI * 0.85;
-        const ax = cx + 14 * Math.cos(angle);
-        const ay = cy + 14 * Math.sin(angle);
-        ctx.beginPath();
-        ctx.moveTo(ax - 5, ay - 2);
-        ctx.lineTo(ax,     ay + 4);
-        ctx.lineTo(ax + 5, ay - 2);
-        ctx.stroke();
+        ctx.setLineDash([]);
     }
     ctx.restore();
 }
 
-// Faint suit symbol shown in empty foundation slots
-function drawSuitHint(x, y, suit) {
+function drawWasteSlot(x, y, canRecycle) {
     ctx.save();
-    ctx.globalAlpha  = 0.22;
-    ctx.fillStyle    = RED_SUITS.has(suit) ? '#880000' : '#002200';
-    ctx.font         = '30px Arial';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(suitSymbol(suit), x + CARD_W / 2, y + CARD_H / 2);
+    if (spriteReady) {
+        const spriteIndex = canRecycle ? IX_WASTE_RECY : IX_WASTE_DONE;
+        const sx = (spriteIndex * CARD_W) % spriteSheet.width;
+        const sy = Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H;
+        ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
+    } else {
+        ctx.strokeStyle = '#004400';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([4, 4]);
+        roundRect(x, y, CARD_W, CARD_H, 4);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (canRecycle) {
+            const cx = x + CARD_W / 2;
+            const cy = y + CARD_H / 2;
+            ctx.strokeStyle = '#006600';
+            ctx.lineWidth   = 2;
+            // Circle arc
+            ctx.beginPath();
+            ctx.arc(cx, cy, 14, -Math.PI * 0.85, Math.PI * 0.85);
+            ctx.stroke();
+            // Arrow tip at the open end
+            const angle = Math.PI * 0.85;
+            const ax = cx + 14 * Math.cos(angle);
+            const ay = cy + 14 * Math.sin(angle);
+            ctx.beginPath();
+            ctx.moveTo(ax - 5, ay - 2);
+            ctx.lineTo(ax,     ay + 4);
+            ctx.lineTo(ax + 5, ay - 2);
+            ctx.stroke();
+        }
+    }
     ctx.restore();
 }
 
@@ -1198,9 +1217,8 @@ function hideDeckDialog(apply) {
 function renderDeckChooser() {
     const dc    = document.getElementById('deck-chooser');
     const dctx  = dc.getContext('2d');
-    const rows  = Math.ceil(BACKS.length / DC_CARDS_PER_ROW);
+    const rows  = Math.ceil(IX_BACKS.length / DC_CARDS_PER_ROW);
     const cell  = CARD_W + DC_CARD_PADDING;
-    const backStartY = BACK_START_ROW * CARD_H;
 
     dc.width  = DC_CARDS_PER_ROW * cell + DC_CARD_PADDING;
     dc.height = rows * (CARD_H + DC_CARD_PADDING) + DC_CARD_PADDING;
@@ -1208,18 +1226,18 @@ function renderDeckChooser() {
     dctx.fillStyle = '#c0c0c0';
     dctx.fillRect(0, 0, dc.width, dc.height);
 
-    for (let i = 0; i < BACKS.length; i++) {
+    for (let i = 0; i < IX_BACKS.length; i++) {
         const col  = i % DC_CARDS_PER_ROW;
         const row  = Math.floor(i / DC_CARDS_PER_ROW);
         const x    = DC_CARD_PADDING + col * cell;
         const y    = DC_CARD_PADDING + row * (CARD_H + DC_CARD_PADDING);
-        const spriteIndex = BACKS[i][0];
+        const spriteIndex = IX_BACKS[i][0];
 
         if (spriteReady) {
             dctx.drawImage(
                 spriteSheet,
                 (spriteIndex * CARD_W) % spriteSheet.width,
-                (Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H) + backStartY,
+                Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H,
                 CARD_W,
                 CARD_H,
                 x,
@@ -1324,7 +1342,7 @@ function init() {
         const col  = Math.floor((px - DC_CARD_PADDING) / (CARD_W + DC_CARD_PADDING));
         const row  = Math.floor((py - DC_CARD_PADDING) / (CARD_H + DC_CARD_PADDING));
         const idx  = row * DC_CARDS_PER_ROW + col;
-        if (idx >= 0 && idx < BACKS.length) {
+        if (idx >= 0 && idx < IX_BACKS.length) {
             pendingBack = idx;
             renderDeckChooser();
         }
