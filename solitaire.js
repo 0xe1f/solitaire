@@ -10,6 +10,10 @@
 const LOGICAL_W = 640;          // logical canvas width (fixed; canvas scales to match)
 const CARD_W    = 71;           // sprite tile width  (px)
 const CARD_H    = 96;           // sprite tile height (px)
+const BACK_START_ROW = 4;
+const SS_CARDS_PER_ROW = 13;    // cards per row in the sprite sheet
+const DC_CARDS_PER_ROW = 6;     // deck chooser cards per row
+const DC_CARD_PADDING = 4;      // deck chooser card padding
 
 const SPRITE_URL = 'cards.png';
 
@@ -20,7 +24,7 @@ const RED_SUITS = new Set(['H', 'D']);
 
 // Available card-back column indices in sprite-sheet row 4.
 // Column 7 is the classic Win3.1 blue-robot back (default).
-const BACK_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const BACKS = [[0],[1],[2],[3],[4],[5],[6,7,8],[9],[10],[11,12],[13,14,15],[16,17,18]];
 
 // Base layout positions in logical coordinates (640 wide)
 const L = {
@@ -75,8 +79,8 @@ const ctx    = canvas.getContext('2d');
 let spriteSheet = null;
 let spriteReady = false;    // true once the sprite image has loaded
 
-let selectedBack = 7;       // column index in sprite-sheet row 4 (default = robot)
-let pendingBack  = 7;       // staged value while deck dialog is open
+let selectedBack = 9;       // combined row/col index, starting in row 4
+let pendingBack  = 9;       // staged value while deck dialog is open
 
 const options = {
     timed:      true,
@@ -185,7 +189,9 @@ function deepClone(s) {
 
 function canDropOnTableau(card, colIdx) {
     const col = state.tableau[colIdx];
-    if (col.length === 0) return card.rank === 13;   // only Kings on empty
+    if (col.length === 0) {
+        return card.rank === 13;   // only Kings on empty
+    }
     const top = col[col.length - 1];
     return top.faceUp &&
            cardIsRed(card) !== cardIsRed(top) &&
@@ -388,9 +394,11 @@ function drawCard(card, x, y) {
 
 // Draw a face-down card back
 function drawBack(x, y) {
+    const backStartY = BACK_START_ROW * CARD_H;
     if (spriteReady) {
-        const sx = selectedBack * CARD_W;
-        const sy = 4 * CARD_H;
+        const spriteIndex = BACKS[selectedBack][0];
+        const sx = (spriteIndex * CARD_W) % spriteSheet.width;
+        const sy = (Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H) + backStartY;
         ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
     } else {
         drawBackFallback(x, y);
@@ -1190,32 +1198,41 @@ function hideDeckDialog(apply) {
 function renderDeckChooser() {
     const dc    = document.getElementById('deck-chooser');
     const dctx  = dc.getContext('2d');
-    const cols  = 4;
-    const rows  = Math.ceil(BACK_COLS.length / cols);
-    const pad   = 4;
-    const cell  = CARD_W + pad;
+    const rows  = Math.ceil(BACKS.length / DC_CARDS_PER_ROW);
+    const cell  = CARD_W + DC_CARD_PADDING;
+    const backStartY = BACK_START_ROW * CARD_H;
 
-    dc.width  = cols * cell + pad;
-    dc.height = rows * (CARD_H + pad) + pad;
+    dc.width  = DC_CARDS_PER_ROW * cell + DC_CARD_PADDING;
+    dc.height = rows * (CARD_H + DC_CARD_PADDING) + DC_CARD_PADDING;
 
     dctx.fillStyle = '#c0c0c0';
     dctx.fillRect(0, 0, dc.width, dc.height);
 
-    for (let i = 0; i < BACK_COLS.length; i++) {
-        const col  = i % cols;
-        const row  = Math.floor(i / cols);
-        const x    = pad + col * cell;
-        const y    = pad + row * (CARD_H + pad);
-        const bcol = BACK_COLS[i];
+    for (let i = 0; i < BACKS.length; i++) {
+        const col  = i % DC_CARDS_PER_ROW;
+        const row  = Math.floor(i / DC_CARDS_PER_ROW);
+        const x    = DC_CARD_PADDING + col * cell;
+        const y    = DC_CARD_PADDING + row * (CARD_H + DC_CARD_PADDING);
+        const spriteIndex = BACKS[i][0];
 
         if (spriteReady) {
-            dctx.drawImage(spriteSheet, bcol * CARD_W, 4 * CARD_H, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
+            dctx.drawImage(
+                spriteSheet,
+                (spriteIndex * CARD_W) % spriteSheet.width,
+                (Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H) + backStartY,
+                CARD_W,
+                CARD_H,
+                x,
+                y,
+                CARD_W,
+                CARD_H
+            );
         } else {
             dctx.fillStyle = '#000080';
             dctx.fillRect(x, y, CARD_W, CARD_H);
         }
 
-        if (pendingBack === bcol) {
+        if (pendingBack === i) {
             dctx.strokeStyle = '#ffff00';
             dctx.lineWidth   = 3;
             dctx.strokeRect(x - 1, y - 1, CARD_W + 2, CARD_H + 2);
@@ -1304,13 +1321,11 @@ function init() {
         const rect = dc.getBoundingClientRect();
         const px   = (e.clientX - rect.left) * (dc.width  / rect.width);
         const py   = (e.clientY - rect.top)  * (dc.height / rect.height);
-        const cols = 4;
-        const pad  = 4;
-        const col  = Math.floor((px - pad) / (CARD_W + pad));
-        const row  = Math.floor((py - pad) / (CARD_H + pad));
-        const idx  = row * cols + col;
-        if (idx >= 0 && idx < BACK_COLS.length) {
-            pendingBack = BACK_COLS[idx];
+        const col  = Math.floor((px - DC_CARD_PADDING) / (CARD_W + DC_CARD_PADDING));
+        const row  = Math.floor((py - DC_CARD_PADDING) / (CARD_H + DC_CARD_PADDING));
+        const idx  = row * DC_CARDS_PER_ROW + col;
+        if (idx >= 0 && idx < BACKS.length) {
+            pendingBack = idx;
             renderDeckChooser();
         }
     });
