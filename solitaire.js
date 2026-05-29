@@ -218,7 +218,9 @@ function canDropOnTableau(card, colIdx) {
 
 function canDropOnFoundation(card, fi) {
     const found = state.foundations[fi];
-    if (found.length === 0) return card.rank === 1;  // Ace starts
+    if (found.length === 0) {
+        return card.rank === 1;  // Ace starts
+    }
     const top = found[found.length - 1];
     return card.suit === top.suit && card.rank === top.rank + 1;
 }
@@ -226,7 +228,9 @@ function canDropOnFoundation(card, fi) {
 // Return the index of the best foundation that will accept card, or -1
 function findBestFoundation(card) {
     for (let i = 0; i < 4; i++) {
-        if (canDropOnFoundation(card, i)) return i;
+        if (canDropOnFoundation(card, i)) {
+            return i;
+        }
     }
     return -1;
 }
@@ -384,7 +388,6 @@ function drawTableau(lh) {
         const cx   = L.TAB_X[col];
 
         if (pile.length === 0) {
-            drawSlot(cx, L.TAB_Y);
             continue;
         }
 
@@ -864,24 +867,37 @@ function flipTopTableauCard(col) {
 function autoMoveToFoundation(src) {
     let card = null;
     if (src.type === 'waste') {
-        if (state.waste.length === 0) return false;
+        if (state.waste.length === 0) {
+            return false;
+        }
         card = state.waste[state.waste.length - 1];
     } else if (src.type === 'tableau') {
         const pile = state.tableau[src.col];
-        if (pile.length === 0) return false;
-        card = pile[pile.length - 1];
-        if (!card.faceUp) return false;
+        if (pile.length === 0) {
+            return false;
+        }
+        src.idx = pile.length - 1;  // ensure we're trying to move the top card
+        card = pile[src.idx];
+        if (!card.faceUp) {
+            return false;
+        }
     }
 
-    if (!card) return false;
+    if (!card) {
+        return false;
+    }
+
     const fi = findBestFoundation(card);
-    if (fi === -1) return false;
+    if (fi === -1) {
+        return false;
+    }
 
     undoState = deepClone(state);
     commitMove(src, [cloneCard(card)], { type: 'foundation', fi });
     render();
     checkAutoComplete();
     checkWin();
+
     return true;
 }
 
