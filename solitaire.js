@@ -45,15 +45,18 @@ const RED_SUITS = new Set(['H', 'D']);
 
 // Base layout positions in logical coordinates (640 wide)
 const L = {
-    STOCK_X:   12, STOCK_Y:  8,
-    WASTE_X:   93, WASTE_Y:  8,
-    FOUND_X:   [255, 336, 417, 498], FOUND_Y: 8,
-    TAB_X:     [12, 93, 174, 255, 336, 417, 498],
-    TAB_Y:     120,
-    FD_DY:     3,    // face-down card vertical offset
-    FU_DY:     20,   // face-up card vertical offset (base; auto-compressed for tall piles)
-    WASTE3_DX: 14,   // horizontal fan offset in Draw-3 mode
-    WASTE3_DY: 1,    // vertical fan offset in Draw-3 mode
+    STOCK_X: 17,
+    STOCK_Y: 5,
+    WASTE_X: 105,
+    WASTE_Y: 5,
+    FOUND_X: [281, 369, 457, 545],
+    FOUND_Y: 5,
+    TAB_X:   [17, 105, 193, 281, 369, 457, 545],
+    TAB_Y:   107,
+    FD_DY:   3,    // face-down card vertical offset
+    FU_DY:   20,   // face-up card vertical offset (base; auto-compressed for tall piles)
+    WASTE3_DX: 14, // horizontal fan offset in Draw-3 mode
+    WASTE3_DY: 1,  // vertical fan offset in Draw-3 mode
 };
 
 // Standard-scoring point deltas
