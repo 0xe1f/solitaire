@@ -885,6 +885,11 @@ function commitMove(src, cards, target) {
         addVegasScore(5);
     }
 
+    const s = serialize(state);
+    if (s) {
+        window.history.replaceState(null, '', `#${s}`);
+    }
+
     return true;
 }
 
@@ -1350,7 +1355,14 @@ function init() {
 
     // ── Initial deal ──────────────────────────────────────────
     resizeCanvas();
-    state = deal(3, 'standard');
+    state = null;
+    const savedState = window.location.hash.slice(1);
+    if (savedState && savedState.length > 0) {
+        state = deserialize(savedState);
+    }
+    if (!state) {
+        state = deal(3, 'standard');
+    }
     startTimer();
     updateStatusBar();
     render();
@@ -1507,6 +1519,93 @@ function init() {
             startTimer();
         }
     });
+}
+
+// --- State Serialization ---
+// layout: flags(1) passes(1) score-i32le(4) elapsed-u24le(3) found×4 stock_len stock… waste_len waste… tabLens×7 tab… fnv32(4)
+// card byte: bit7=0 bits6-5=suit_idx bits4-1=(rank-1) bit0=faceUp → URL-safe base64 (no padding)
+
+const _SI = { S: 0, H: 1, C: 2, D: 3 };
+const _SD = ['standard', 'vegas', 'none'];
+
+function _fnv32(buf) {
+    let h = 0x811c9dc5;
+    for (const b of buf) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+    return h;
+}
+
+function _pack(s) {
+    const tl = s.tableau.map(c => c.length);
+    const buf = new Uint8Array(26 + s.stock.length + s.waste.length + tl.reduce((a, b) => a + b, 0));
+    let p = 0;
+    const B = v => buf[p++] = v;  // Uint8Array auto-masks to 8 bits
+    const card = c => (_SI[c.suit] << 5) | ((c.rank - 1) << 1) | (c.faceUp ? 1 : 0);
+
+    B(((s.drawCount > 1) << 7) | (_SD.indexOf(s.scoring) << 5) | (s.won ? 16 : 0) | (s.autoCompleting ? 8 : 0));
+    B(Math.min(s.passes, 255));
+    const sc = s.score | 0;
+    B(sc); B(sc >> 8); B(sc >> 16); B(sc >> 24);
+    const el = s.elapsed >>> 0;
+    B(el); B(el >> 8); B(el >> 16);
+    for (const f of s.foundations) B(f.length ? (_SI[f[0].suit] << 4) | f.length : 0xF0);
+    B(s.stock.length); for (const c of s.stock) B(card(c));
+    B(s.waste.length); for (const c of s.waste) B(card(c));
+    for (const l of tl) B(l);
+    for (const col of s.tableau) for (const c of col) B(card(c));
+    const cs = _fnv32(buf.subarray(0, p));
+    B(cs); B(cs >> 8); B(cs >> 16); B(cs >> 24);
+    return buf;
+}
+
+function _unpack(buf) {
+    if (buf.length < 26) throw new Error('Truncated');
+    const de = buf.length - 4;
+    const cs = buf[de] | (buf[de+1] << 8) | (buf[de+2] << 16) | (buf[de+3] << 24);
+    if ((_fnv32(buf.subarray(0, de)) | 0) !== (cs | 0)) throw new Error('Checksum');
+    let p = 0;
+    const flags = buf[p++], si = (flags >> 5) & 3;
+    if (si > 2) throw new Error('Bad scoring');
+    const passes  = buf[p++];
+    const score   = buf[p] | (buf[p+1] << 8) | (buf[p+2] << 16) | (buf[p+3] << 24); p += 4;
+    const elapsed = buf[p] | (buf[p+1] << 8) | (buf[p+2] << 16); p += 3;
+    const foundations = Array.from({ length: 4 }, () => {
+        const fb = buf[p++], sn = fb >> 4, cnt = fb & 15;
+        if (sn === 15) { if (cnt) throw new Error('Bad foundation'); return []; }
+        if (sn > 3 || !cnt || cnt > 13) throw new Error('Bad foundation');
+        return Array.from({ length: cnt }, (_, i) => ({ suit: SUITS[sn], rank: i + 1, faceUp: true }));
+    });
+    const read = n => {
+        if (p + n > de) throw new Error('Truncated');
+        return Array.from({ length: n }, () => {
+            const b = buf[p++], c = { suit: SUITS[(b >> 5) & 3], rank: ((b >> 1) & 15) + 1, faceUp: !!(b & 1) };
+            if (c.rank > 13) throw new Error('Bad card');
+            return c;
+        });
+    };
+    if (p + 9 > de) throw new Error('Truncated');
+    const stock = read(buf[p++]), waste = read(buf[p++]);
+    const tableau = Array.from({ length: 7 }, () => buf[p++]).map(read);
+    if (p !== de) throw new Error('Extra bytes');
+    const all = [...stock, ...waste, ...foundations.flat(), ...tableau.flat()];
+    if (all.length !== 52 || new Set(all.map(c => c.suit + c.rank)).size !== 52) throw new Error('Bad deck');
+    return { stock, waste, foundations, tableau, passes, score, elapsed,
+             drawCount: flags >> 7 ? 3 : 1, scoring: _SD[si],
+             won: !!(flags & 16), autoCompleting: !!(flags & 8) };
+}
+
+function serialize(state) {
+    try {
+        const buf = _pack(state);
+        let s = ''; for (const b of buf) s += String.fromCharCode(b);
+        return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch(e) { console.error('serialize:', e); return null; }
+}
+
+function deserialize(str) {
+    try {
+        const s = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - str.length % 4) % 4));
+        return _unpack(Uint8Array.from(s, c => c.charCodeAt(0)));
+    } catch(e) { console.error('deserialize:', e); return null; }
 }
 
 document.addEventListener('DOMContentLoaded', init);
