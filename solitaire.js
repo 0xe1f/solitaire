@@ -1075,35 +1075,38 @@ function startWinAnimation() {
     winAnimating = true;
     let aborted  = false;
 
-    // Gather all foundation cards and clear the foundations
-    const allCards = [];
+    // Build a list of deck indices and shuffle them
+    const foundationDecks = [];
     for (let fi = 0; fi < 4; fi++) {
-        for (const card of state.foundations[fi]) {
-            allCards.push({ card, x: L.FOUND_X[fi], y: L.FOUND_Y });
-        }
-        state.foundations[fi] = [];
+        foundationDecks.push(fi, fi, fi, fi, fi, fi, fi, fi, fi, fi, fi, fi, fi);
     }
-    shuffle(allCards);  // randomise launch order for variety
-
-    let launchIdx = 0;
+    shuffle(foundationDecks);
 
     function launchNext() {
-        if (aborted || launchIdx >= allCards.length) return;
-        const { card, x, y } = allCards[launchIdx++];
-        winParticles.push(new Particle(card, x, y));
-        if (launchIdx < allCards.length) setTimeout(launchNext, 65);
+        if (aborted || !foundationDecks.length) {
+            return;
+        }
+        const fi = foundationDecks.pop();
+        const card = state.foundations[fi].pop();
+        winParticles.push(new Particle(card, L.FOUND_X[fi], L.FOUND_Y));
+        if (foundationDecks.length) {
+            setTimeout(launchNext, 65);
+        }
     }
     launchNext();
 
     function animLoop() {
-        if (aborted) return;
+        if (aborted) {
+            return;
+        }
         const lh = logicalH();
-        for (const p of winParticles) p.update(lh);
+        for (const p of winParticles) {
+            p.update(lh);
+        }
         winParticles = winParticles.filter(p => !p.isDone());
         render();
 
-        const stillLaunching = launchIdx < allCards.length;
-        if (winParticles.length > 0 || stillLaunching) {
+        if (winParticles.length > 0 || foundationDecks.length) {
             winAnimFrame = requestAnimationFrame(animLoop);
         } else {
             winAnimating = false;
@@ -1112,7 +1115,12 @@ function startWinAnimation() {
     }
     winAnimFrame = requestAnimationFrame(animLoop);
 
-    winAbortFn = () => { aborted = true; };
+    winAbortFn = () => {
+        aborted = true;
+        for (let fi = 0; fi < 4; fi++) {
+            state.foundations[fi] = [];
+        }
+    };
 }
 
 // --- Timer ---
