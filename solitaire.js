@@ -47,6 +47,8 @@ const RED_SUITS = new Set(['H', 'D']);
 const L = {
     STOCK_X: 17,
     STOCK_Y: 5,
+    THICK_X_OFFSET: 2, // h. offset between cards added for thickness effect
+    THICK_Y_OFFSET: 1, // v. offset between cards added for thickness effect
     WASTE_X: 105,
     WASTE_Y: 5,
     FOUND_X: [281, 369, 457, 545],
@@ -54,7 +56,7 @@ const L = {
     TAB_X:   [17, 105, 193, 281, 369, 457, 545],
     TAB_Y:   107,
     FD_DY:   3,    // face-down card vertical offset
-    FU_DY:   20,   // face-up card vertical offset (base; auto-compressed for tall piles)
+    FU_DY:   20,   // face-up card offset (base; auto-compressed for tall piles)
     WASTE3_DX: 14, // horizontal fan offset in Draw-3 mode
     WASTE3_DY: 1,  // vertical fan offset in Draw-3 mode
 };
@@ -333,7 +335,13 @@ function drawBoard(lh) {
 
 function drawStock() {
     if (state.stock.length > 0) {
-        drawBack(L.STOCK_X, L.STOCK_Y);
+        const cardCount = Math.trunc((state.stock.length - 1) / 8) + 1;
+        for (let i = 0; i < cardCount; i++) {
+            drawBack(
+                L.STOCK_X + i * L.THICK_X_OFFSET,
+                L.STOCK_Y + i * L.THICK_Y_OFFSET
+            );
+        }
     } else {
         const canRecycle = !(state.scoring === 'vegas' && state.drawCount === 3 && state.passes >= 1);
         drawWasteSlot(L.STOCK_X, L.STOCK_Y, canRecycle);
@@ -348,9 +356,26 @@ function drawWaste() {
         return;
     }
 
+    // We draw some cards for thickness effect, depending on the number
+    // left in the waste. Doesn't really matter what we draw - it'll be covered
+    const effectCardCount = (state.drawCount === 1)
+        ? Math.max(0, Math.trunc((wasteLen - 2) / 10))
+        : Math.max(0, Math.trunc((wasteLen - 3) / 10));
+    let offsetX = L.WASTE_X;
+    let offsetY = L.WASTE_Y;
+    for (let i = 0; i < effectCardCount; i++) {
+        drawCard(
+            state.waste[0],
+            offsetX,
+            offsetY
+        );
+        offsetX += L.THICK_X_OFFSET;
+        offsetY += L.THICK_Y_OFFSET;
+    }
+
     if (state.drawCount === 1) {
         if (!isDragged) {
-            drawCard(state.waste[wasteLen - 1], L.WASTE_X, L.WASTE_Y);
+            drawCard(state.waste[wasteLen - 1], offsetX, offsetY);
         }
         return;
     }
@@ -365,7 +390,13 @@ function drawWaste() {
         if (isDragged && cardIdx === topIdx) {
             continue;
         }
-        drawCard(state.waste[cardIdx], L.WASTE_X + i * L.WASTE3_DX, L.WASTE_Y + i * L.WASTE3_DY);
+        drawCard(
+            state.waste[cardIdx],
+            offsetX,
+            offsetY
+        );
+        offsetX += L.WASTE3_DX;
+        offsetY += L.WASTE3_DY;
     }
 }
 
