@@ -18,6 +18,11 @@
 
 // --- Constants ---
 
+const SC_VEGAS = 'vegas';
+const SC_STANDARD = 'standard';
+const SC_NONE = 'none';
+const SC_ALL = [SC_STANDARD, SC_VEGAS, SC_NONE];
+
 const LOGICAL_W = 640;    // logical canvas width (fixed; canvas scales to match)
 const CARD_W    = 71;     // sprite tile width  (px)
 const CARD_H    = 96;     // sprite tile height (px)
@@ -109,7 +114,7 @@ const options = {
     statusBar: true,
     outlineDrag: false,
     drawCount: 3,
-    scoring: 'standard',
+    scoring: SC_STANDARD,
     deck: 9,
 };
 
@@ -145,7 +150,7 @@ function freshState() {
         tableau:         [[], [], [], [], [], [], []],
         drawCount:       options.drawCount,
         scoring:         options.scoring,
-        score:           options.scoring === 'vegas' ? -52 : 0,
+        score:           options.scoring === SC_VEGAS ? -52 : 0,
         elapsed:         0,
         passes:          0,
         won:             false,
@@ -245,20 +250,24 @@ function findBestFoundation(card) {
 // --- Scoring ---
 
 function addScore(event) {
-    if (state.scoring !== 'standard') return;
+    if (state.scoring !== SC_STANDARD) {
+        return;
+    }
     const delta = SCORE[event] ?? 0;
     state.score = Math.max(0, state.score + delta);
     updateStatusBar();
 }
 
 function addVegasScore(delta) {
-    if (state.scoring !== 'vegas') return;
+    if (state.scoring !== SC_VEGAS) {
+        return;
+    }
     state.score += delta;
     updateStatusBar();
 }
 
 function computeWinBonus() {
-    if (state.scoring === 'standard' && options.timed && state.elapsed > 0) {
+    if (state.scoring === SC_STANDARD && options.timed && state.elapsed > 0) {
         state.score += Math.floor(700000 / state.elapsed);
         updateStatusBar();
     }
@@ -335,6 +344,10 @@ function drawBoard(lh) {
     drawTableau(lh);
 }
 
+function canRecycle() {
+    return state.scoring !== SC_VEGAS || state.passes < (state.drawCount - 1);
+}
+
 function drawStock() {
     if (state.stock.length > 0) {
         const cardCount = Math.trunc((state.stock.length - 1) / 8) + 1;
@@ -345,8 +358,7 @@ function drawStock() {
             );
         }
     } else {
-        const canRecycle = !(state.scoring === 'vegas' && state.drawCount === 3 && state.passes >= 1);
-        drawWasteSlot(L.STOCK_X, L.STOCK_Y, canRecycle);
+        drawWasteSlot(L.STOCK_X, L.STOCK_Y, canRecycle());
     }
 }
 
@@ -630,8 +642,8 @@ function drawWinOverlay(lh) {
     ctx.font      = 'bold 30px Arial';
     ctx.fillText('You Win!', cx, cy - 26);
 
-    if (state.scoring !== 'none') {
-        const label = state.scoring === 'vegas'
+    if (state.scoring !== SC_NONE) {
+        const label = state.scoring === SC_VEGAS
             ? `$${state.score}`
             : `Score: ${state.score}`;
         ctx.font = '16px Arial';
@@ -903,10 +915,8 @@ function saveState() {
 
 function saveOptions(opts) {
     const optString = JSON.stringify(opts);
-
     const date = new Date();
     date.setTime(date.getTime() + (365 * 24 * 60 * 60 * 1000)); // 1 year
-
     document.cookie = `options=${encodeURIComponent(optString)}; expires=${date.toUTCString()}; path=/; SameSite=Strict; Secure`;
 }
 
@@ -981,15 +991,16 @@ function doDrawStock() {
         card.faceUp = true;
         state.waste.push(card);
     }
+    saveState();
 }
 
 function recycleWaste() {
-    // Vegas Draw-3: only one pass through the deck, no recycle
-    if (state.scoring === 'vegas' && state.drawCount === 3) return;
+    if (!canRecycle()) {
+        return;
+    }
 
     state.passes++;
-    // Draw-1 Standard: second and subsequent recycles cost -100
-    if (state.scoring === 'standard' && state.drawCount === 1 && state.passes > 1) {
+    if (state.scoring === SC_STANDARD && state.passes >= state.drawCount) {
         addScore('RECYCLE');
     }
 
@@ -998,6 +1009,8 @@ function recycleWaste() {
         card.faceUp = false;
         state.stock.push(card);
     }
+
+    saveState();
 }
 
 // --- Auto-complete & Win Detection ---
@@ -1155,7 +1168,7 @@ function startWinAnimation() {
 
 function startTimer() {
     stopTimer();
-    if (!options.timed || state.scoring === 'none') {
+    if (!options.timed || state.scoring === SC_NONE) {
         return;
     }
     timerInterval = setInterval(tickTimer, 1000);
@@ -1171,7 +1184,7 @@ function stopTimer() {
 function tickTimer() {
     state.elapsed++;
     // Standard timed penalty: -2 pts every 10 seconds
-    if (state.scoring === 'standard' && state.elapsed % 10 === 0) {
+    if (state.scoring === SC_STANDARD && state.elapsed % 10 === 0) {
         state.score = Math.max(0, state.score - 2);
     }
     updateStatusBar();
@@ -1187,9 +1200,9 @@ function updateStatusBar() {
         return;
     }
 
-    if (state.scoring === 'vegas') {
+    if (state.scoring === SC_VEGAS) {
         scoreEl.textContent = `$${state.score}`;
-    } else if (state.scoring === 'standard') {
+    } else if (state.scoring === SC_STANDARD) {
         scoreEl.textContent = `Score: ${state.score}`;
     } else {
         scoreEl.textContent = '';
@@ -1380,10 +1393,10 @@ function hideAboutDialog() {
 function init() {
     const savedOptions = loadOptions();
     if (savedOptions) {
-        if (savedOptions.drawCount in [1, 3]) {
+        if ([1, 3].includes(savedOptions.drawCount)) {
             options.drawCount = savedOptions.drawCount;
         }
-        if (savedOptions.scoring in ['standard', 'vegas', 'none']) {
+        if (SC_ALL.includes(savedOptions.scoring)) {
             options.scoring = savedOptions.scoring;
         }
         options.timed = savedOptions.timed === true;
@@ -1583,7 +1596,6 @@ function init() {
 // card byte: bit7=0 bits6-5=suit_idx bits4-1=(rank-1) bit0=faceUp → URL-safe base64 (no padding)
 
 const _SI = { S: 0, H: 1, C: 2, D: 3 };
-const _SD = ['standard', 'vegas', 'none'];
 
 function _fnv32(buf) {
     let h = 0x811c9dc5;
@@ -1598,7 +1610,7 @@ function _pack(s) {
     const B = v => buf[p++] = v;  // Uint8Array auto-masks to 8 bits
     const card = c => (_SI[c.suit] << 5) | ((c.rank - 1) << 1) | (c.faceUp ? 1 : 0);
 
-    B(((s.drawCount > 1) << 7) | (_SD.indexOf(s.scoring) << 5) | (s.won ? 16 : 0) | (s.autoCompleting ? 8 : 0));
+    B(((s.drawCount > 1) << 7) | (SC_ALL.indexOf(s.scoring) << 5) | (s.won ? 16 : 0) | (s.autoCompleting ? 8 : 0));
     B(Math.min(s.passes, 255));
     const sc = s.score | 0;
     B(sc); B(sc >> 8); B(sc >> 16); B(sc >> 24);
@@ -1646,7 +1658,7 @@ function _unpack(buf) {
     const all = [...stock, ...waste, ...foundations.flat(), ...tableau.flat()];
     if (all.length !== 52 || new Set(all.map(c => c.suit + c.rank)).size !== 52) throw new Error('Bad deck');
     return { stock, waste, foundations, tableau, passes, score, elapsed,
-             drawCount: flags >> 7 ? 3 : 1, scoring: _SD[si],
+             drawCount: flags >> 7 ? 3 : 1, scoring: SC_ALL[si],
              won: !!(flags & 16), autoCompleting: !!(flags & 8) };
 }
 
