@@ -102,13 +102,15 @@ const ctx    = canvas.getContext('2d');
 let spriteSheet = null;
 let spriteReady = false;    // true once the sprite image has loaded
 
-let selectedBack = 9;       // combined row/col index, starting in row 4
 let pendingBack  = 9;       // staged value while deck dialog is open
 
 const options = {
-    timed:      true,
-    statusBar:  true,
+    timed: true,
+    statusBar: true,
     outlineDrag: false,
+    drawCount: 3,
+    scoring: 'standard',
+    deck: 9,
 };
 
 let state     = null;       // full game state object (see freshState)
@@ -135,15 +137,15 @@ let activeMenu = null;
 
 // --- Deck & Deal ---
 
-function freshState(drawCount, scoring) {
+function freshState() {
     return {
         stock:           [],
         waste:           [],
         foundations:     [[], [], [], []],   // indexed 0-3, one per suit slot
         tableau:         [[], [], [], [], [], [], []],
-        drawCount,
-        scoring,
-        score:           scoring === 'vegas' ? -52 : 0,
+        drawCount:       options.drawCount,
+        scoring:         options.scoring,
+        score:           options.scoring === 'vegas' ? -52 : 0,
         elapsed:         0,
         passes:          0,
         won:             false,
@@ -168,8 +170,8 @@ function shuffle(arr) {
     }
 }
 
-function deal(drawCount, scoring) {
-    const s    = freshState(drawCount, scoring);
+function deal() {
+    const s = freshState();
     const deck = makeDeck();
     shuffle(deck);
 
@@ -452,7 +454,7 @@ function drawCard(card, x, y) {
 // Draw a face-down card back
 function drawBack(x, y) {
     if (spriteReady) {
-        const spriteIndex = IX_BACKS[selectedBack][0];
+        const spriteIndex = IX_BACKS[options.deck][0];
         const sx = (spriteIndex * CARD_W) % spriteSheet.width;
         const sy = Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H;
         ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
@@ -734,7 +736,7 @@ function hitTest(lx, ly) {
 function onPointerDown(lx, ly, isTouch) {
     // Clicking anywhere on the win overlay starts a new game
     if (state.won && !winAnimating) {
-        startNewGame(state.drawCount, state.scoring);
+        startNewGame();
         return;
     }
     if (state.won || state.autoCompleting || drag) return;
@@ -885,12 +887,38 @@ function commitMove(src, cards, target) {
         addVegasScore(5);
     }
 
+    saveState();
+
+    return true;
+}
+
+function saveState() {
     const s = serialize(state);
     if (s) {
         window.history.replaceState(null, '', `#${s}`);
+    } else {
+        window.history.replaceState(null, '', ' ');
     }
+}
 
-    return true;
+function saveOptions(opts) {
+    const optString = JSON.stringify(opts);
+
+    const date = new Date();
+    date.setTime(date.getTime() + (365 * 24 * 60 * 60 * 1000)); // 1 year
+
+    document.cookie = `options=${encodeURIComponent(optString)}; expires=${date.toUTCString()}; path=/; SameSite=Strict; Secure`;
+}
+
+function loadOptions() {
+    const optionsCookie = document.cookie.split('; ').find(row => row.startsWith('options='));
+    if (optionsCookie) {
+        const optString = decodeURIComponent(optionsCookie.split('=')[1]);
+        if (optString) {
+            return JSON.parse(optString);
+        }
+    }
+    return null;
 }
 
 // Turn over the top face-down card in a tableau column after cards are removed
@@ -1127,7 +1155,9 @@ function startWinAnimation() {
 
 function startTimer() {
     stopTimer();
-    if (!options.timed || state.scoring === 'none') return;
+    if (!options.timed || state.scoring === 'none') {
+        return;
+    }
     timerInterval = setInterval(tickTimer, 1000);
 }
 
@@ -1170,7 +1200,7 @@ function updateStatusBar() {
 
 // --- Game Management ---
 
-function startNewGame(drawCount, scoring) {
+function startNewGame() {
     // Clean up any running win animation
     if (winAbortFn)   { winAbortFn(); winAbortFn = null; }
     if (winAnimFrame) { cancelAnimationFrame(winAnimFrame); winAnimFrame = null; }
@@ -1180,8 +1210,9 @@ function startNewGame(drawCount, scoring) {
     stopTimer();
     undoState = null;
     drag      = null;
-    state     = deal(drawCount, scoring);
+    state     = deal();
 
+    saveState();
     startTimer();
     updateStatusBar();
     render();
@@ -1225,12 +1256,12 @@ function onOutsideClick(e) {
 function handleMenuAction(action) {
     closeMenu();
     switch (action) {
-        case 'deal':    startNewGame(state.drawCount, state.scoring); break;
-        case 'undo':    undo();                                        break;
-        case 'deck':    showDeckDialog();                              break;
-        case 'options': showOptionsDialog();                           break;
-        case 'exit':    window.close();                                break;
-        case 'about':   showAboutDialog();                             break;
+        case 'deal':    startNewGame();      break;
+        case 'undo':    undo();              break;
+        case 'deck':    showDeckDialog();    break;
+        case 'options': showOptionsDialog(); break;
+        case 'exit':    window.close();      break;
+        case 'about':   showAboutDialog();   break;
     }
 }
 
@@ -1246,8 +1277,8 @@ function hideOverlay() {
 
 function showOptionsDialog() {
     // Populate with current settings
-    const drawRadio    = document.querySelector(`input[name="draw"][value="${state.drawCount}"]`);
-    const scoringRadio = document.querySelector(`input[name="scoring"][value="${state.scoring}"]`);
+    const drawRadio    = document.querySelector(`input[name="draw"][value="${options.drawCount}"]`);
+    const scoringRadio = document.querySelector(`input[name="scoring"][value="${options.scoring}"]`);
     if (drawRadio)    drawRadio.checked    = true;
     if (scoringRadio) scoringRadio.checked = true;
     document.getElementById('opt-timed').checked     = options.timed;
@@ -1260,19 +1291,20 @@ function showOptionsDialog() {
 
 function hideOptionsDialog(apply) {
     if (apply) {
-        const drawCount = parseInt(document.querySelector('input[name="draw"]:checked').value, 10);
-        const scoring   = document.querySelector('input[name="scoring"]:checked').value;
+        options.drawCount = parseInt(document.querySelector('input[name="draw"]:checked').value, 10);
+        options.scoring   = document.querySelector('input[name="scoring"]:checked').value;
         options.timed      = document.getElementById('opt-timed').checked;
         options.statusBar  = document.getElementById('opt-statusbar').checked;
         options.outlineDrag = document.getElementById('opt-outline').checked;
-        startNewGame(drawCount, scoring);
+        saveOptions(options);
+        startNewGame();
     }
     hideOverlay();
     document.getElementById('dlg-options').hidden = true;
 }
 
 function showDeckDialog() {
-    pendingBack = selectedBack;
+    pendingBack = options.deck;
     showOverlay();
     document.getElementById('dlg-deck').hidden = false;
     renderDeckChooser();
@@ -1280,7 +1312,8 @@ function showDeckDialog() {
 
 function hideDeckDialog(apply) {
     if (apply) {
-        selectedBack = pendingBack;
+        options.deck = pendingBack;
+        saveOptions(options);
         render();
     }
     hideOverlay();
@@ -1345,6 +1378,22 @@ function hideAboutDialog() {
 // --- Event Wiring ---
 
 function init() {
+    const savedOptions = loadOptions();
+    if (savedOptions) {
+        if (savedOptions.drawCount in [1, 3]) {
+            options.drawCount = savedOptions.drawCount;
+        }
+        if (savedOptions.scoring in ['standard', 'vegas', 'none']) {
+            options.scoring = savedOptions.scoring;
+        }
+        options.timed = savedOptions.timed === true;
+        options.statusBar = savedOptions.statusBar === true;
+        options.outlineDrag = savedOptions.outlineDrag === true;
+        if (savedOptions.deck >= 0 && savedOptions.deck < IX_BACKS.length) {
+            options.deck = savedOptions.deck;
+        }
+    }
+
     // ── Sprite sheet ───────────────────────────────────────────
     spriteSheet = new Image();
     spriteSheet.onload = () => {
@@ -1369,7 +1418,7 @@ function init() {
         state = deserialize(savedState);
     }
     if (!state) {
-        state = deal(3, 'standard');
+        state = deal();
     }
     startTimer();
     updateStatusBar();
