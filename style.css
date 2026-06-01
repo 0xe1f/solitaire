@@ -55,46 +55,42 @@ html, body {
     height: 100dvh;       /* dynamic viewport height (handles mobile chrome) */
 }
 
-/* ── Title bar ────────────────────────────────────────────── */
-#title-bar {
-    display: flex;
-    height: 18px;
-    align-items: center;
-    gap: 4px;
-    background: #a0c8f0;
-    color: var(--acttext);
-    flex-shrink: 0;
-}
-
-#title-icon { font-size: 14px; line-height: 1; }
-
-#title-text {
-    flex: 1;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 0.3px;
-}
-
 /* ── Menu bar ─────────────────────────────────────────────── */
 #menu-bar {
     display: flex;
     height: 20px;
     background: #fff;
     align-items: stretch;
-    border-top: 1px solid #000;
     border-bottom: 1px solid #000;
     flex-shrink: 0;
+    padding: 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#st-score,
+#st-time {
+    align-self: center;
+    margin-left: 4px;
+}
+
+#st-time {
+    margin-right: 8px;
+}
+
+#st-score {
+    margin-left: auto;
 }
 
 .menu-btn {
     background: transparent;
     border: 1px solid transparent;
     padding: 2px 8px;
-    font-size: 12px;
     font-family: inherit;
+    font-weight: inherit;
+    font-size: inherit;
     cursor: pointer;
     color: var(--text);
-    line-height: 1.5;
 }
 
 .menu-btn:hover,
@@ -120,25 +116,6 @@ html, body {
     cursor: default;
 }
 
-/* ── Status bar ───────────────────────────────────────────── */
-#status-bar {
-    display: flex;
-    height: 17px;
-    align-items: center;
-    gap: 16px;
-    background: #fff;
-    border-top: 1px solid #000;
-    flex-shrink: 0;
-}
-
-#status-bar span {
-    font-size: 11px;
-    border: 1px solid;
-    border-color: var(--dk) var(--lt) var(--lt) var(--dk);
-    padding: 1px 8px;
-    min-width: 90px;
-    display: inline-block;
-}
 
 /* ── Dropdown menus ───────────────────────────────────────── */
 .dropdown {
@@ -332,19 +309,15 @@ html, body {
 
 /* ── Mobile overrides ─────────────────────────────────────── */
 @media (max-width: 480px) {
-    #title-bar  { padding: 4px 6px; }
-    #menu-bar   { padding: 1px 0; }
+    #menu-bar   { padding: 1px 0 1px 0; }
     .menu-btn   { padding: 4px 6px; font-size: 13px; }
 
-    #status-bar { padding: 2px 6px; gap: 8px; }
-    #status-bar span { min-width: 70px; font-size: 10px; }
+    #st-score, #st-time { min-width: 70px; font-size: 10px; }
 
     .dialog { width: calc(100vw - 16px); min-width: unset; }
     .win-btn-dlg { padding: 6px 12px; font-size: 13px; }
 }
 
 @media (max-height: 400px) and (orientation: landscape) {
-    #title-bar { padding: 1px 4px; }
-    #menu-bar  { padding: 0; }
-    #status-bar { padding: 1px 6px; }
+    #menu-bar { padding: 0 4px 0 0; }
 }
