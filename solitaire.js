@@ -29,17 +29,24 @@ const CARD_H    = 96;     // sprite tile height (px)
 const IX_EMPTY_SLOT = 77; // sprite index of the empty card slot
 const IX_WASTE_RECY = 75; // sprite index of the recyclable waste slot
 const IX_WASTE_DONE = 76; // sprite index of the finished waste slot
-const IX_BACKS = [
-    [52],[53],[54],[55],[56],[57], // Available card-back sprite indices
-    [58,59,60],                    // Some are animated, so additional indices
-    [61],[62],                     // represent additional frames
-    [63,64],
-    [65,66,67],
-    [68,69,70],
+const DECKS = [           // available decks
+    { start: 0,  frames: [52] },          // diag hatch
+    { start: 0,  frames: [53] },          // horiz hatch
+    { start: 0,  frames: [54] },          // fish, light blue
+    { start: 0,  frames: [55] },          // fish, dark blue
+    { start: 0,  frames: [56] },          // plants, black
+    { start: 0,  frames: [57] },          // plants, blue
+    { start: 0,  frames: [60,59,58,59] }, // robot
+    { start: 0,  frames: [61] },          // rose
+    { start: 0,  frames: [62] },          // cone
+    { start: 0,  frames: [63,64] },       // castle
+    { start: 50, frames: [65,66,67,66] }, // sun & palm tree
+    { start: 15, frames: [68,69,70,69] }, // hand holding cards
 ];
 const SS_CARDS_PER_ROW = 13; // cards per row in the sprite sheet
 const DC_CARDS_PER_ROW = 6;  // deck chooser cards per row
 const DC_CARD_PADDING = 4;   // deck chooser card padding
+const TIMER_INTERVAL = 250;  // timer interval (ms)
 
 const SPRITE_URL = 'cards.png';
 
@@ -106,8 +113,8 @@ const ctx    = canvas.getContext('2d');
 
 let spriteSheet = null;
 let spriteReady = false;    // true once the sprite image has loaded
-
 let pendingBack  = 9;       // staged value while deck dialog is open
+let deckFrame    = 0;       // current frame of the deck animation
 
 const options = {
     timed: true,
@@ -131,6 +138,8 @@ let winAbortFn   = null;    // called to stop the win animation early
 
 // Timer
 let timerInterval = null;
+let timerStart = 0;
+let previouslyElapsed = -1;
 
 // Double-tap detection (mobile)
 let lastTapTime = 0;
@@ -311,7 +320,9 @@ function resizeCanvas() {
 }
 
 function render() {
-    if (!state) return;
+    if (!state) {
+        return;
+    }
 
     const dpr   = window.devicePixelRatio || 1;
     const scale = getScale();
@@ -332,7 +343,9 @@ function render() {
         drawWinOverlay(lh);
     }
 
-    if (drag) drawDragStack();
+    if (drag) {
+        drawDragStack();
+    }
 
     ctx.restore();
 }
@@ -348,16 +361,19 @@ function canRecycle() {
     return state.scoring !== SC_VEGAS || state.passes < (state.drawCount - 1);
 }
 
-function drawStock() {
+function drawStock(topCardOnly = false) {
     if (state.stock.length > 0) {
         const cardCount = Math.trunc((state.stock.length - 1) / 8) + 1;
         for (let i = 0; i < cardCount; i++) {
-            drawBack(
-                L.STOCK_X + i * L.THICK_X_OFFSET,
-                L.STOCK_Y + i * L.THICK_Y_OFFSET
-            );
+            if (!topCardOnly || i === cardCount - 1) {
+                drawBack(
+                    L.STOCK_X + i * L.THICK_X_OFFSET,
+                    L.STOCK_Y + i * L.THICK_Y_OFFSET,
+                    (i == cardCount - 1) ? deckFrame : 0, // top card is animated
+                );
+            }
         }
-    } else {
+    } else if (!topCardOnly) {
         drawWasteSlot(L.STOCK_X, L.STOCK_Y, canRecycle());
     }
 }
@@ -464,9 +480,9 @@ function drawCard(card, x, y) {
 }
 
 // Draw a face-down card back
-function drawBack(x, y) {
+function drawBack(x, y, frame = 0) {
     if (spriteReady) {
-        const spriteIndex = IX_BACKS[options.deck][0];
+        const spriteIndex = DECKS[options.deck].frames[frame];
         const sx = (spriteIndex * CARD_W) % spriteSheet.width;
         const sy = Math.trunc(spriteIndex / SS_CARDS_PER_ROW) * CARD_H;
         ctx.drawImage(spriteSheet, sx, sy, CARD_W, CARD_H, x, y, CARD_W, CARD_H);
@@ -1171,7 +1187,8 @@ function startTimer() {
     if (!options.timed || state.scoring === SC_NONE) {
         return;
     }
-    timerInterval = setInterval(tickTimer, 1000);
+    timerStart = Date.now() - state.elapsed * 1000;
+    timerInterval = setInterval(tickTimer, TIMER_INTERVAL);
 }
 
 function stopTimer() {
@@ -1182,11 +1199,43 @@ function stopTimer() {
 }
 
 function tickTimer() {
-    state.elapsed++;
+    state.elapsed = Math.round((Date.now() - timerStart) / 1000);
+    const secondChanged = state.elapsed != previouslyElapsed;
+    previouslyElapsed = state.elapsed;
+
     // Standard timed penalty: -2 pts every 10 seconds
-    if (state.scoring === SC_STANDARD && state.elapsed % 10 === 0) {
+    if (secondChanged && state.scoring === SC_STANDARD && state.elapsed % 10 === 0) {
         state.score = Math.max(0, state.score - 2);
     }
+
+    // Animate the deck
+    const previousDeckFrame = deckFrame;
+    if (DECKS[options.deck].frames.length) {
+        if (DECKS[options.deck].start) {
+            // sporadically triggered animation
+            const animDurationSecs = Math.trunc(TIMER_INTERVAL * DECKS[options.deck].frames.length / 1000);
+            const intervalSecs = (state.elapsed + animDurationSecs) % DECKS[options.deck].start;
+            if (deckFrame || (secondChanged && intervalSecs === 0)) {
+                if (++deckFrame >= DECKS[options.deck].frames.length) {
+                    deckFrame = 0;
+                }
+            }
+        } else if (++deckFrame >= DECKS[options.deck].frames.length) {
+            // continuous animation
+            deckFrame = 0;
+        }
+    }
+
+    // Draw the top of the stock if it has changed
+    if (state.stock.length && previousDeckFrame !== deckFrame) {
+        const scale = getScale();
+        const dpr = window.devicePixelRatio || 1;
+        ctx.save();
+        ctx.scale(scale * dpr, scale * dpr);
+        drawStock(true);
+        ctx.restore();
+    }
+
     updateStatusBar();
 }
 
@@ -1219,6 +1268,8 @@ function startNewGame() {
     if (winAnimFrame) { cancelAnimationFrame(winAnimFrame); winAnimFrame = null; }
     winParticles = [];
     winAnimating = false;
+    deckFrame = 0;
+    previouslyElapsed = -1;
 
     stopTimer();
     undoState = null;
@@ -1325,6 +1376,7 @@ function showDeckDialog() {
 
 function hideDeckDialog(apply) {
     if (apply) {
+        deckFrame = 0;
         options.deck = pendingBack;
         saveOptions(options);
         render();
@@ -1337,7 +1389,7 @@ function hideDeckDialog(apply) {
 function renderDeckChooser() {
     const dc    = document.getElementById('deck-chooser');
     const dctx  = dc.getContext('2d');
-    const rows  = Math.ceil(IX_BACKS.length / DC_CARDS_PER_ROW);
+    const rows  = Math.ceil(DECKS.length / DC_CARDS_PER_ROW);
     const cell  = CARD_W + DC_CARD_PADDING;
 
     dc.width  = DC_CARDS_PER_ROW * cell + DC_CARD_PADDING;
@@ -1346,12 +1398,12 @@ function renderDeckChooser() {
     dctx.fillStyle = '#c0c0c0';
     dctx.fillRect(0, 0, dc.width, dc.height);
 
-    for (let i = 0; i < IX_BACKS.length; i++) {
+    for (let i = 0; i < DECKS.length; i++) {
         const col  = i % DC_CARDS_PER_ROW;
         const row  = Math.floor(i / DC_CARDS_PER_ROW);
         const x    = DC_CARD_PADDING + col * cell;
         const y    = DC_CARD_PADDING + row * (CARD_H + DC_CARD_PADDING);
-        const spriteIndex = IX_BACKS[i][0];
+        const spriteIndex = DECKS[i].frames[0];
 
         if (spriteReady) {
             dctx.drawImage(
@@ -1402,7 +1454,7 @@ function init() {
         options.timed = savedOptions.timed === true;
         options.statusBar = savedOptions.statusBar === true;
         options.outlineDrag = savedOptions.outlineDrag === true;
-        if (savedOptions.deck >= 0 && savedOptions.deck < IX_BACKS.length) {
+        if (savedOptions.deck >= 0 && savedOptions.deck < DECKS.length) {
             options.deck = savedOptions.deck;
         }
     }
@@ -1426,6 +1478,8 @@ function init() {
     // ── Initial deal ──────────────────────────────────────────
     resizeCanvas();
     state = null;
+    deckFrame = 0;
+    previouslyElapsed = -1;
     const savedState = window.location.hash.slice(1);
     if (savedState && savedState.length > 0) {
         state = deserialize(savedState);
@@ -1485,7 +1539,7 @@ function init() {
         const col  = Math.floor((px - DC_CARD_PADDING) / (CARD_W + DC_CARD_PADDING));
         const row  = Math.floor((py - DC_CARD_PADDING) / (CARD_H + DC_CARD_PADDING));
         const idx  = row * DC_CARDS_PER_ROW + col;
-        if (idx >= 0 && idx < IX_BACKS.length) {
+        if (idx >= 0 && idx < DECKS.length) {
             pendingBack = idx;
             renderDeckChooser();
         }
