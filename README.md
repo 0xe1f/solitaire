@@ -3,6 +3,8 @@
 Old-school Windows 3.1 Solitaire for web browser. No server-side or external
 dependencies.
 
+You can [play it here](https://0xe1f.github.io/solitaire/).
+
 ## Screenshot
 
 ![Solitaire screenshot](docs/screenshot_800x600.png)

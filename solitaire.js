@@ -145,6 +145,7 @@ let previouslyElapsed = -1;
 let lastTapTime = 0;
 let lastTapX    = 0;
 let lastTapY    = 0;
+let lastDoubleTapMs = 0;
 
 // Active dropdown menu
 let activeMenu = null;
@@ -1591,11 +1592,19 @@ function init() {
     });
 
     canvas.addEventListener('dblclick', (e) => {
+        if (Date.now() - lastDoubleTapMs < 500) {
+            return;
+        }
         const lp  = toLogical(e.clientX, e.clientY);
         const hit = hitTest(lp.x, lp.y);
-        if (!hit) return;
-        if (hit.type === 'waste')    autoMoveToFoundation({ type: 'waste' });
-        else if (hit.type === 'tableau') autoMoveToFoundation({ type: 'tableau', col: hit.col });
+        if (!hit) {
+            return;
+        }
+        if (hit.type === 'waste') {
+            autoMoveToFoundation({ type: 'waste' });
+        } else if (hit.type === 'tableau') {
+            autoMoveToFoundation({ type: 'tableau', col: hit.col });
+        }
     });
 
     // ── Canvas — touch ────────────────────────────────────────
@@ -1613,10 +1622,16 @@ function init() {
 
         if (doubleTap) {
             lastTapTime = 0;
+            lastDoubleTapMs = now;
             const hit = hitTest(lp.x, lp.y);
-            if (!hit) return;
-            if (hit.type === 'waste')    autoMoveToFoundation({ type: 'waste' });
-            else if (hit.type === 'tableau') autoMoveToFoundation({ type: 'tableau', col: hit.col });
+            if (!hit) {
+                return;
+            }
+            if (hit.type === 'waste') {
+                autoMoveToFoundation({ type: 'waste' });
+            } else if (hit.type === 'tableau') {
+                autoMoveToFoundation({ type: 'tableau', col: hit.col });
+            }
             return;
         }
 
