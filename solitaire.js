@@ -1091,15 +1091,24 @@ function runAutoStep() {
 
 // Returns true if the game is now won; triggers animation
 function checkWin() {
-    if (state.won) return true;
-    const total = state.foundations.reduce((sum, f) => sum + f.length, 0);
-    if (total < 52) return false;
+    if (state.won) {
+        return true;
+    }
 
-    state.won          = true;
+    const total = state.foundations.reduce((sum, f) => sum + f.length, 0);
+    if (total < 52) {
+        return false;
+    }
+
+    state.won = true;
     state.autoCompleting = false;
+
     stopTimer();
     computeWinBonus();
     startWinAnimation();
+
+    window.history.replaceState(null, '', ' ');
+
     return true;
 }
 
