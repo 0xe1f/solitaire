@@ -767,10 +767,18 @@ function onPointerDown(lx, ly, isTouch) {
         startNewGame();
         return;
     }
-    if (state.won || state.autoCompleting || drag) return;
+    if (state.won || state.autoCompleting || drag) {
+        return;
+    }
+
+    if (state && !timerInterval) {
+        startTimer();
+    }
 
     const hit = hitTest(lx, ly);
-    if (!hit) return;
+    if (!hit) {
+        return;
+    }
 
     if (hit.type === 'stock') {
         undoState = deepClone(state);
@@ -1277,7 +1285,6 @@ function startNewGame() {
     state     = deal();
 
     saveState();
-    startTimer();
     updateStatusBar();
     render();
 }
@@ -1487,7 +1494,6 @@ function init() {
     if (!state) {
         state = deal();
     }
-    startTimer();
     updateStatusBar();
     render();
 
@@ -1717,6 +1723,9 @@ function _unpack(buf) {
 }
 
 function serialize(state) {
+    if (isFresh(state)) {
+        return null;
+    }
     try {
         const buf = _pack(state);
         let s = ''; for (const b of buf) s += String.fromCharCode(b);
@@ -1729,6 +1738,14 @@ function deserialize(str) {
         const s = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - str.length % 4) % 4));
         return _unpack(Uint8Array.from(s, c => c.charCodeAt(0)));
     } catch(e) { console.error('deserialize:', e); return null; }
+}
+
+function isFresh(s) {
+    return s.waste.length === 0
+        && s.passes === 0
+        && s.foundations.every(f => f.length === 0)
+        && s.tableau.every((col, i) =>
+               col.length === i + 1 && col.slice(0, -1).every(c => !c.faceUp));
 }
 
 document.addEventListener('DOMContentLoaded', init);
