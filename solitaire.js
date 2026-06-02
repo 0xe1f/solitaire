@@ -1508,9 +1508,13 @@ function init() {
     render();
 
     // ── Window resize ─────────────────────────────────────────
-    window.addEventListener('resize', () => {
-        resizeCanvas();
-    });
+    window.addEventListener('resize', resizeCanvas);
+    // visualViewport fires after iOS has finished applying the new geometry
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', resizeCanvas);
+    }
+    // Fallback for browsers that only fire orientationchange
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 10));
 
     // ── Keyboard ──────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
