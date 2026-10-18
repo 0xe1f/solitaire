@@ -109,7 +109,7 @@ function suitSymbol(suit) {
 // --- State ---
 
 const canvas = document.getElementById('board');
-const ctx    = canvas.getContext('2d');
+let ctx      = canvas.getContext('2d');
 
 let spriteSheet = null;
 let spriteReady = false;    // true once the sprite image has loaded
@@ -135,6 +135,15 @@ let winParticles = [];
 let winAnimating = false;
 let winAnimFrame = null;
 let winAbortFn   = null;    // called to stop the win animation early
+let winLastTick  = 0;
+// Trail copies live on their own canvas. The moving card is drawn every
+// frame, so it glides instead of jumping from stamp to stamp.
+let trailCanvas = null;
+let trailCtx    = null;
+// Milliseconds between trail stamps, so each copy of the card stays visible.
+const WIN_TRAIL_MS = 4;
+// Multiplier on the win-animation physics. 1 is the original pace.
+const WIN_SPEED = 2.0;
 
 // Timer
 let timerInterval = null;
@@ -332,20 +341,22 @@ function render() {
     ctx.save();
     ctx.scale(scale * dpr, scale * dpr);
 
-    // Green felt background
-    ctx.fillStyle = '#008000';
-    ctx.fillRect(0, 0, LOGICAL_W, lh);
+    if (winAnimating) {
+        paintWinFrame(lh);
+    } else {
+        // Green felt background
+        ctx.fillStyle = '#008000';
+        ctx.fillRect(0, 0, LOGICAL_W, lh);
 
-    drawBoard(lh);
+        drawBoard(lh);
 
-    if (winParticles.length > 0) {
-        drawWinParticles();
-    } else if (state.won && !winAnimating) {
-        drawWinOverlay(lh);
-    }
+        if (state.won) {
+            drawWinOverlay(lh);
+        }
 
-    if (drag) {
-        drawDragStack();
+        if (drag) {
+            drawDragStack();
+        }
     }
 
     ctx.restore();
@@ -638,7 +649,54 @@ function drawDragStack() {
     }
 }
 
-function drawWinParticles() {
+function ensureTrailCanvas() {
+    if (trailCanvas && trailCanvas.width === canvas.width && trailCanvas.height === canvas.height) {
+        return;
+    }
+    trailCanvas = document.createElement('canvas');
+    trailCanvas.width = canvas.width;
+    trailCanvas.height = canvas.height;
+    trailCtx = trailCanvas.getContext('2d');
+}
+
+function resetTrailCanvas() {
+    ensureTrailCanvas();
+    trailCtx.setTransform(1, 0, 0, 1, 0, 0);
+    trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+}
+
+// Permanent trail copies. The on-screen card is drawn separately, every frame.
+function stampWinTrails() {
+    ensureTrailCanvas();
+    const now   = performance.now();
+    const dpr   = window.devicePixelRatio || 1;
+    const scale = getScale();
+    const prev  = ctx;
+    ctx = trailCtx;
+    try {
+        trailCtx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+        for (const p of winParticles) {
+            if (p.lastStamp !== 0 && now - p.lastStamp < WIN_TRAIL_MS) {
+                continue;
+            }
+            drawCard(p.card, Math.round(p.x), Math.round(p.y));
+            p.lastStamp = now;
+        }
+    } finally {
+        ctx = prev;
+    }
+}
+
+function paintWinFrame(lh) {
+    ctx.fillStyle = '#008000';
+    ctx.fillRect(0, 0, LOGICAL_W, lh);
+    drawBoard(lh);
+    stampWinTrails();
+    ctx.drawImage(
+        trailCanvas,
+        0, 0, trailCanvas.width, trailCanvas.height,
+        0, 0, LOGICAL_W, lh
+    );
     for (const p of winParticles) {
         drawCard(p.card, p.x, p.y);
     }
@@ -763,6 +821,11 @@ function hitTest(lx, ly) {
 }
 
 function onPointerDown(lx, ly, isTouch) {
+    // Clicking during the scatter skips ahead to the win screen.
+    if (state.won && winAnimating) {
+        finishWinAnimation();
+        return;
+    }
     // Clicking anywhere on the win overlay starts a new game
     if (state.won && !winAnimating) {
         startNewGame();
@@ -1119,25 +1182,29 @@ class Particle {
         this.card    = card;
         this.x       = x;
         this.y       = y;
-        this.vx      = (Math.random() - 0.5) * 11;
-        this.vy      = -(Math.random() * 10 + 5);
-        this.bounces = 0;
+        this.vx        = (Math.random() - 0.5) * 10;
+        // A near-zero sideways speed would bounce in place and never exit.
+        if (Math.abs(this.vx) < 1) {
+            this.vx = this.vx < 0 ? -1 : 1;
+        }
+        this.vy        = -(Math.random() * 15 + 5);
+        this.lastStamp = 0;
     }
 
-    update(lh) {
-        this.x  += this.vx;
-        this.y  += this.vy;
-        this.vy += 0.45;   // gravity
+    update(lh, step) {
+        const t = step * WIN_SPEED;
+        this.x  += this.vx * t;
+        this.y  += this.vy * t;
+        this.vy += 0.45 * t;   // gravity
 
         if (this.y + CARD_H >= lh) {
             this.y  = lh - CARD_H;
             this.vy = -(Math.abs(this.vy) * 0.72);
-            this.bounces++;
         }
     }
 
     isDone() {
-        return this.x > LOGICAL_W || this.x < -CARD_W || this.bounces > 5;
+        return this.x > LOGICAL_W || this.x < -CARD_W;
     }
 }
 
@@ -1148,6 +1215,8 @@ function startWinAnimation() {
 
     winParticles = [];
     winAnimating = true;
+    winLastTick  = 0;
+    resetTrailCanvas();
     let aborted  = false;
 
     // Build a list of deck indices and shuffle them
@@ -1158,34 +1227,40 @@ function startWinAnimation() {
     shuffle(foundationDecks);
 
     function launchNext() {
-        if (aborted || !foundationDecks.length) {
+        if (aborted || !foundationDecks.length || winParticles.length) {
             return;
         }
         const fi = foundationDecks.pop();
         const card = state.foundations[fi].pop();
         winParticles.push(new Particle(card, L.FOUND_X[fi], L.FOUND_Y));
-        if (foundationDecks.length) {
-            setTimeout(launchNext, 65);
-        }
     }
     launchNext();
 
-    function animLoop() {
+    function animLoop(now) {
         if (aborted) {
             return;
         }
+        if (!winLastTick) {
+            winLastTick = now;
+        }
+        // Scale the physics to real time. A late frame used to move the
+        // card by one tick and then pause, which read as jitter.
+        const step = Math.min(now - winLastTick, 34) / (1000 / 60);
+        winLastTick = now;
+
         const lh = logicalH();
         for (const p of winParticles) {
-            p.update(lh);
+            p.update(lh, step);
         }
         winParticles = winParticles.filter(p => !p.isDone());
+        // Windows launches the next card only after the one in flight is gone.
+        launchNext();
         render();
 
         if (winParticles.length > 0 || foundationDecks.length) {
             winAnimFrame = requestAnimationFrame(animLoop);
         } else {
-            winAnimating = false;
-            render();   // show the "You Win!" overlay
+            finishWinAnimation();
         }
     }
     winAnimFrame = requestAnimationFrame(animLoop);
@@ -1196,6 +1271,25 @@ function startWinAnimation() {
             state.foundations[fi] = [];
         }
     };
+}
+
+function finishWinAnimation() {
+    if (!winAnimating) {
+        return;
+    }
+    if (winAbortFn) {
+        winAbortFn();
+        winAbortFn = null;
+    }
+    if (winAnimFrame) {
+        cancelAnimationFrame(winAnimFrame);
+        winAnimFrame = null;
+    }
+    winParticles = [];
+    winAnimating = false;
+    winLastTick  = 0;
+    resetTrailCanvas();
+    render();
 }
 
 // --- Timer ---
@@ -1286,6 +1380,8 @@ function startNewGame() {
     if (winAnimFrame) { cancelAnimationFrame(winAnimFrame); winAnimFrame = null; }
     winParticles = [];
     winAnimating = false;
+    winLastTick  = 0;
+    resetTrailCanvas();
     deckFrame = 0;
     previouslyElapsed = -1;
 
